@@ -1,0 +1,728 @@
+asyncapi: 2.6.0
+info:
+  title: Brevo (Sendinblue) Webhooks
+  version: '1.0.0'
+  description: |-
+    AsyncAPI description of the outbound webhook surface for Brevo (formerly
+    Sendinblue). Brevo delivers event notifications by issuing HTTP POST
+    requests with a JSON body to a URL configured by the customer. There are
+    two distinct webhook product lines:
+
+      - Transactional webhooks: events for transactional email (and SMS)
+        sent through Brevo's SMTP/API relay.
+      - Marketing webhooks: events for marketing email campaigns and for
+        contact-list lifecycle activity.
+
+    Each event carries an `event` discriminator field whose value identifies
+    the event class (for example `request`, `delivered`, `hard_bounce`,
+    `click`, `unique_opened`, `list_addition`, `contact_updated`).
+
+    Source documentation:
+      - Transactional webhooks: https://developers.brevo.com/docs/transactional-webhooks
+      - Marketing webhooks:     https://developers.brevo.com/docs/marketing-webhooks
+      - Webhooks overview:      https://developers.brevo.com/docs/how-to-use-webhooks
+
+    Security:
+      Brevo does not document an HMAC signature header or a fixed signing
+      secret for outbound webhooks. The documented hardening options are
+      (1) embedding HTTP Basic credentials in the webhook URL and (2)
+      restricting the subscriber endpoint to Brevo's published source IP
+      ranges. Both options are modelled below in
+      `components.securitySchemes`.
+  contact:
+    name: Brevo Support
+    url: https://www.brevo.com/contact/
+  license:
+    name: Brevo Terms of Service
+    url: https://www.brevo.com/legal/termsofuse/
+
+defaultContentType: application/json
+
+servers:
+  subscriber:
+    url: '{webhookUrl}'
+    protocol: https
+    description: |-
+      Customer-hosted HTTPS endpoint that receives webhook POSTs from Brevo.
+      The full URL (including path) is configured per webhook in the Brevo
+      dashboard or via the Webhooks API. A separate subscriber URL is
+      configured per webhook record, and a single URL may be reused across
+      multiple event types.
+    variables:
+      webhookUrl:
+        default: https://example.com/brevo/webhook
+        description: Fully-qualified HTTPS URL of the subscriber endpoint.
+    security:
+      - basicAuth: []
+      - ipAllowList: []
+
+channels:
+  /brevo/transactional/webhook:
+    description: |-
+      Subscriber endpoint that receives Brevo transactional email webhook
+      events. Brevo POSTs one event per HTTP request. The `event` field in
+      the JSON body identifies the event class.
+    bindings:
+      http:
+        type: request
+        method: POST
+        bindingVersion: '0.3.0'
+    publish:
+      operationId: receiveTransactionalWebhook
+      summary: Receive a Brevo transactional email webhook event
+      description: |-
+        Brevo POSTs a JSON event to the subscriber endpoint. Subscribers
+        should respond with a 2xx status code. Event ordering is not
+        guaranteed; consumers should rely on the `ts_event` / `ts_epoch`
+        timestamps and on `message-id` for correlation.
+      message:
+        oneOf:
+          - $ref: '#/components/messages/TxRequest'
+          - $ref: '#/components/messages/TxDelivered'
+          - $ref: '#/components/messages/TxSoftBounce'
+          - $ref: '#/components/messages/TxHardBounce'
+          - $ref: '#/components/messages/TxBlocked'
+          - $ref: '#/components/messages/TxInvalidEmail'
+          - $ref: '#/components/messages/TxDeferred'
+          - $ref: '#/components/messages/TxError'
+          - $ref: '#/components/messages/TxSpam'
+          - $ref: '#/components/messages/TxOpened'
+          - $ref: '#/components/messages/TxUniqueOpened'
+          - $ref: '#/components/messages/TxProxyOpen'
+          - $ref: '#/components/messages/TxUniqueProxyOpen'
+          - $ref: '#/components/messages/TxClick'
+          - $ref: '#/components/messages/TxUnsubscribed'
+
+  /brevo/marketing/webhook:
+    description: |-
+      Subscriber endpoint that receives Brevo marketing webhook events. Brevo
+      POSTs one event per HTTP request. The `event` field in the JSON body
+      identifies the event class. Marketing webhooks cover both campaign
+      activity (opens, clicks, bounces, unsubscribes) and contact-list
+      lifecycle activity (list additions, contact updates, contact deletes).
+    bindings:
+      http:
+        type: request
+        method: POST
+        bindingVersion: '0.3.0'
+    publish:
+      operationId: receiveMarketingWebhook
+      summary: Receive a Brevo marketing webhook event
+      description: |-
+        Brevo POSTs a JSON event to the subscriber endpoint. Subscribers
+        should respond with a 2xx status code. The `camp_id` field identifies
+        the originating campaign for campaign-driven events; contact
+        lifecycle events use a `key` field instead.
+      message:
+        oneOf:
+          - $ref: '#/components/messages/MkOpened'
+          - $ref: '#/components/messages/MkClick'
+          - $ref: '#/components/messages/MkListAddition'
+          - $ref: '#/components/messages/MkContactUpdated'
+          - $ref: '#/components/messages/MkContactDeleted'
+
+components:
+  securitySchemes:
+    basicAuth:
+      type: httpApiKey
+      description: |-
+        HTTP Basic credentials embedded directly in the webhook URL
+        (for example `https://user:pass@example.com/webhook`). Brevo sends
+        them in the standard `Authorization: Basic <base64>` header on each
+        POST.
+      name: Authorization
+      in: header
+    ipAllowList:
+      type: httpApiKey
+      description: |-
+        Source IP allowlist. Brevo documents the IP ranges used by its
+        webhook delivery workers; subscribers may restrict inbound POSTs to
+        those addresses. Modelled here as a transport-layer scheme because
+        AsyncAPI 2.6 has no first-class IP allowlist type.
+      name: X-Forwarded-For
+      in: header
+
+  messages:
+    # ---------- Transactional email messages ----------
+    TxRequest:
+      name: TxRequest
+      title: Transactional Sent (request)
+      summary: A transactional email was accepted by Brevo for sending.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxRequestPayload'
+
+    TxDelivered:
+      name: TxDelivered
+      title: Transactional Delivered
+      summary: A transactional email was accepted by the recipient mail server.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxDeliveredPayload'
+
+    TxSoftBounce:
+      name: TxSoftBounce
+      title: Transactional Soft Bounce
+      summary: A transactional email was temporarily rejected by the recipient mail server.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxSoftBouncePayload'
+
+    TxHardBounce:
+      name: TxHardBounce
+      title: Transactional Hard Bounce
+      summary: A transactional email was permanently rejected by the recipient mail server.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxHardBouncePayload'
+
+    TxBlocked:
+      name: TxBlocked
+      title: Transactional Blocked
+      summary: A transactional email was blocked before sending (for example, the recipient is on the account-level block list).
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxBlockedPayload'
+
+    TxInvalidEmail:
+      name: TxInvalidEmail
+      title: Transactional Invalid Email
+      summary: The recipient address was rejected as syntactically invalid.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxInvalidEmailPayload'
+
+    TxDeferred:
+      name: TxDeferred
+      title: Transactional Deferred
+      summary: The recipient mail server temporarily deferred the message; Brevo will retry.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxDeferredPayload'
+
+    TxError:
+      name: TxError
+      title: Transactional Error
+      summary: A processing error occurred while handling the transactional message.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxErrorPayload'
+
+    TxSpam:
+      name: TxSpam
+      title: Transactional Spam Complaint
+      summary: The recipient flagged the transactional message as spam.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxSpamPayload'
+
+    TxOpened:
+      name: TxOpened
+      title: Transactional Opened
+      summary: The recipient opened the transactional message (may fire multiple times).
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxOpenedPayload'
+
+    TxUniqueOpened:
+      name: TxUniqueOpened
+      title: Transactional First Open (unique_opened)
+      summary: The recipient opened the transactional message for the first time.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxUniqueOpenedPayload'
+
+    TxProxyOpen:
+      name: TxProxyOpen
+      title: Transactional Proxy Open
+      summary: The transactional message was opened via a mail-privacy proxy (for example Apple Mail Privacy Protection).
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxProxyOpenPayload'
+
+    TxUniqueProxyOpen:
+      name: TxUniqueProxyOpen
+      title: Transactional First Proxy Open (unique_proxy_open)
+      summary: The first proxy-based open recorded for the transactional message.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxUniqueProxyOpenPayload'
+
+    TxClick:
+      name: TxClick
+      title: Transactional Click
+      summary: The recipient clicked a tracked link in the transactional message.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxClickPayload'
+
+    TxUnsubscribed:
+      name: TxUnsubscribed
+      title: Transactional Unsubscribed
+      summary: The recipient unsubscribed from the transactional message.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TxUnsubscribedPayload'
+
+    # ---------- Marketing messages ----------
+    MkOpened:
+      name: MkOpened
+      title: Marketing Opened
+      summary: A recipient opened a marketing campaign email.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MkOpenedPayload'
+
+    MkClick:
+      name: MkClick
+      title: Marketing Click
+      summary: A recipient clicked a tracked link in a marketing campaign email.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MkClickPayload'
+
+    MkListAddition:
+      name: MkListAddition
+      title: Contact Added To List (list_addition)
+      summary: A contact was added to one or more lists.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MkListAdditionPayload'
+
+    MkContactUpdated:
+      name: MkContactUpdated
+      title: Contact Updated (contact_updated)
+      summary: One or more attributes of a contact were updated.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MkContactUpdatedPayload'
+
+    MkContactDeleted:
+      name: MkContactDeleted
+      title: Contact Deleted (contact_deleted)
+      summary: A contact was deleted from the account.
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/MkContactDeletedPayload'
+
+  schemas:
+    # ---------- Shared base schema for transactional email events ----------
+    TxEmailBase:
+      type: object
+      description: |-
+        Fields common to all transactional email webhook events. The `event`
+        field is the discriminator. `ts_epoch` is documented as UTC
+        milliseconds for most events; `ts` and `ts_event` are seconds. `date`
+        is rendered in CET/CEST per Brevo's documentation.
+      required:
+        - event
+        - email
+        - id
+        - message-id
+      properties:
+        event:
+          type: string
+          description: Event discriminator (for example `request`, `delivered`, `click`).
+        email:
+          type: string
+          format: email
+          description: Recipient email address.
+        id:
+          type: integer
+          description: Brevo internal numeric identifier for the event row.
+        date:
+          type: string
+          description: Event date and time in CET/CEST, formatted `YYYY-MM-DD HH:MM:SS`.
+          example: '2020-10-09 00:00:00'
+        ts:
+          type: integer
+          description: UTC timestamp in seconds.
+          example: 1604933619
+        message-id:
+          type: string
+          description: SMTP message identifier for the sent transactional message.
+          example: 201798300811.5787683@relay.domain.com
+        ts_event:
+          type: integer
+          description: UTC timestamp of the event itself, in seconds.
+          example: 1604933654
+        subject:
+          type: string
+          description: Subject line of the originating transactional email.
+        X-Mailin-custom:
+          type: string
+          description: Free-form custom header value passed by the sender at submission time.
+        sending_ip:
+          type: string
+          description: IP address from which the email was sent.
+        ts_epoch:
+          type: integer
+          format: int64
+          description: UTC timestamp in milliseconds. Documented for most transactional events.
+          example: 1604933654000
+        template_id:
+          type: integer
+          description: Identifier of the Brevo template used for the message, if any.
+        tags:
+          type: array
+          description: Tag values supplied by the sender at submission time.
+          items:
+            type: string
+        tag:
+          type: string
+          description: |-
+            JSON-encoded tag value used on some events (notably `unsubscribed`,
+            `proxy_open`, and `unique_proxy_open`).
+        mirror_link:
+          type: string
+          format: uri
+          description: Brevo log preview URL for the message.
+        contact_id:
+          type: integer
+          format: int64
+          description: Brevo contact identifier for the recipient. Zero when no contact exists.
+
+    TxRequestPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [request]
+
+    TxDeliveredPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [delivered]
+
+    TxSoftBouncePayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [soft_bounce]
+            reason:
+              type: string
+              description: Human-readable explanation supplied by the remote mail server.
+
+    TxHardBouncePayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [hard_bounce]
+            reason:
+              type: string
+              description: Human-readable explanation supplied by the remote mail server.
+
+    TxBlockedPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [blocked]
+
+    TxInvalidEmailPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [invalid_email]
+
+    TxDeferredPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [deferred]
+            reason:
+              type: string
+              description: Reason supplied by the remote mail server for the deferral.
+
+    TxErrorPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [error]
+
+    TxSpamPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [spam]
+
+    TxOpenedPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [opened]
+            user_agent:
+              type: string
+              description: User-Agent header reported by the opener's mail client.
+            device_used:
+              type: string
+              description: Device class inferred from the User-Agent.
+              example: DESKTOP
+
+    TxUniqueOpenedPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [unique_opened]
+            user_agent:
+              type: string
+            device_used:
+              type: string
+
+    TxProxyOpenPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [proxy_open]
+            user_agent:
+              type: string
+            device_used:
+              type: string
+
+    TxUniqueProxyOpenPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [unique_proxy_open]
+            link:
+              type: string
+              description: Empty string on proxy opens; preserved by Brevo for shape parity with click events.
+            sender_email:
+              type: string
+              format: email
+              description: Originating sender address for the message.
+            user_agent:
+              type: string
+            device_used:
+              type: string
+
+    TxClickPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [click]
+            link:
+              type: string
+              format: uri
+              description: URL that was clicked.
+            user_agent:
+              type: string
+            device_used:
+              type: string
+
+    TxUnsubscribedPayload:
+      allOf:
+        - $ref: '#/components/schemas/TxEmailBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [unsubscribed]
+            user_agent:
+              type: string
+            device_used:
+              type: string
+
+    # ---------- Marketing event schemas ----------
+    MkCampaignBase:
+      type: object
+      description: |-
+        Fields common to marketing campaign events (opened, click). Brevo
+        documents `ts_sent` and `ts_event` in seconds, and `ts` as the
+        webhook delivery timestamp in seconds.
+      required:
+        - event
+        - email
+        - camp_id
+      properties:
+        id:
+          type: integer
+          description: Webhook delivery identifier.
+        camp_id:
+          type: integer
+          description: Identifier of the originating marketing campaign.
+        email:
+          type: string
+          format: email
+        campaign name:
+          type: string
+          description: Campaign name. Note the literal space in the field key as documented by Brevo.
+        date_sent:
+          type: string
+          description: Send time, formatted `YYYY-MM-DD HH:MM:SS`.
+        date_event:
+          type: string
+          description: Event time, formatted `YYYY-MM-DD HH:MM:SS`.
+        event:
+          type: string
+          description: Event discriminator.
+        tag:
+          type: string
+          description: Campaign tag (may be empty).
+        segment_ids:
+          type: array
+          description: Identifiers of the segments the recipient belonged to at send time.
+          items:
+            type: integer
+        ts_sent:
+          type: integer
+          description: UTC send timestamp in seconds.
+        ts_event:
+          type: integer
+          description: UTC event timestamp in seconds.
+        ts:
+          type: integer
+          description: UTC webhook delivery timestamp in seconds.
+
+    MkOpenedPayload:
+      allOf:
+        - $ref: '#/components/schemas/MkCampaignBase'
+        - type: object
+          properties:
+            event:
+              type: string
+              enum: [opened]
+
+    MkClickPayload:
+      allOf:
+        - $ref: '#/components/schemas/MkCampaignBase'
+        - type: object
+          required:
+            - URL
+          properties:
+            event:
+              type: string
+              enum: [click]
+            URL:
+              type: string
+              format: uri
+              description: URL that was clicked. Uppercase per Brevo's documented payload.
+
+    MkListAdditionPayload:
+      type: object
+      description: Contact was added to one or more Brevo contact lists.
+      required:
+        - event
+        - email
+      properties:
+        id:
+          type: string
+          description: Webhook delivery identifier (string per documented example).
+        email:
+          type: string
+          format: email
+        event:
+          type: string
+          enum: [list_addition]
+        key:
+          type: string
+          description: Account-level webhook key supplied by Brevo.
+        list_id:
+          type: array
+          description: Identifiers of the lists the contact was added to.
+          items:
+            type: integer
+        date:
+          type: string
+          description: Event date and time, formatted `YYYY-MM-DD HH:MM:SS`.
+        ts:
+          type: integer
+          description: UTC timestamp in seconds.
+
+    MkContactUpdatedPayload:
+      type: object
+      description: Attributes of a contact were updated.
+      required:
+        - event
+        - email
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        event:
+          type: string
+          enum: [contact_updated]
+        key:
+          type: string
+        content:
+          type: array
+          description: |-
+            Array of attribute objects reflecting the updated contact state.
+            Brevo documents this as a list of free-form attribute objects.
+          items:
+            type: object
+            additionalProperties: true
+        date:
+          type: string
+        ts:
+          type: integer
+
+    MkContactDeletedPayload:
+      type: object
+      description: A contact was deleted.
+      required:
+        - event
+        - email
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        event:
+          type: string
+          enum: [contact_deleted]
+        key:
+          type: string
+        list_id:
+          type: array
+          items:
+            type: integer
+          description: Identifiers of the lists the contact had been a member of.
+        date:
+          type: string
+        ts:
+          type: integer

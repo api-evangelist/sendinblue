@@ -4,7 +4,7 @@ description: "A service that provides solutions relating to marketing and/or tra
 url: https://developers.sendinblue.com/docs
 specificationVersion: '0.20'
 created: '2026-05-28'
-modified: '2026-05-28'
+modified: '2026-05-30'
 x-source: public-apis/public-apis
 x-category: "Email"
 x-tier: 3
@@ -22,6 +22,10 @@ apis:
     properties:
       - type: Documentation
         url: https://developers.sendinblue.com/docs
+      - type: AsyncAPI
+        url: asyncapi/sendinblue-webhooks-asyncapi.yml
+        x-version: '2.6.0'
+        x-description: Brevo (Sendinblue) transactional and marketing webhook events.
 common:
   - type: Website
     url: https://developers.sendinblue.com/docs
