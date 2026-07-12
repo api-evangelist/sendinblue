@@ -27,6 +27,8 @@ apis:
         x-version: '2.6.0'
         x-description: Brevo (Sendinblue) transactional and marketing webhook events.
 common:
+  - type: DomainSecurity
+    url: security/sendinblue-domain-security.yml
   - type: Website
     url: https://developers.sendinblue.com/docs
   - type: PublicAPIsListing
