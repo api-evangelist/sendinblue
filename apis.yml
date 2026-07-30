@@ -1,4 +1,16 @@
 aid: sendinblue
+accessModel:
+  pricing: unknown
+  onboarding: unknown
+  trial: false
+  try_now: false
+  public: false
+  label: Unknown
+  confidence: low
+  source: []
+  generated: '2026-07-22'
+  method: derived
+image: https://kinlane-images.s3.amazonaws.com/shared/apis-json/icons/sendinblue.png
 name: Sendinblue
 description: "A service that provides solutions relating to marketing and/or transactional email and/or SMS"
 url: https://developers.sendinblue.com/docs
