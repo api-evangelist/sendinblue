@@ -41,7 +41,6 @@ apis:
   - name: Sendinblue
     description: "A service that provides solutions relating to marketing and/or transactional email and/or SMS"
     humanURL: https://developers.sendinblue.com/docs
-    baseURL: https://developers.sendinblue.com/docs
     tags:
       - Email
     properties:
