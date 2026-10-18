@@ -52,8 +52,41 @@ edges:
     builder: Pipedream repo (component)
   detected_by: sweep-workflow-automation.py
   first_seen: '2026-10-15'
+- partner_name: Meltano
+  partner: meltano
+  partner_match: aggregator
+  type: marketplace
+  marketplace: meltano-hub
+  channel: elt-connector
+  relationship: ipaas-bridge
+  direction: third-party
+  evidence: https://hub.meltano.com/extractors/tap-sendinblue--airbyte
+  category: null
+  contract_reference:
+    register: Meltano Hub (github.com/meltano/hub _data/meltano extractors + loaders)
+    spec_file: null
+    role: elt-connector:meltano-hub
+    registered_name: Sendinblue
+    matched_domain: sendinblue.com
+    matched_by: domain
+    detected_by: sweep-data-integration.py
+    detected: '2026-10-18'
+    signal_note: one edge per (provider, platform); connectors, streams, packages and usage are context, never read
+    plugins:
+    - tap-sendinblue--airbyte
+    - tap-sendinblue--hotgluexyz
+    maintenance_status:
+    - active
+    - beta
+    quality:
+    - bronze
+    - gold
+    builder: 'community (Meltano Hub variant maintainers: airbyte, hotgluexyz)'
+  detected_by: sweep-data-integration.py
+  first_seen: '2026-10-18'
 method: searched
 checked:
 - https://github.com/PipedreamHQ/pipedream/tree/94800dd6de6640b942c65ea7ee655f71ac56d438/components/
+- https://github.com/meltano/hub
 - https://github.com/rudderlabs/rudder-integrations-config/tree/main/src/configurations/destinations/sendinblue
 source: https://github.com/rudderlabs/rudder-integrations-config/tree/main/src/configurations/destinations/sendinblue
